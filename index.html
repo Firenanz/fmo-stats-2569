@@ -1131,5 +1131,41 @@ loadEmbedded();
 })();
 </script>
 <!-- ===== จบสรุปประจำเดือน ===== -->
+
+<!-- ===== หมายเหตุจำนวนท่า (ไดนามิก) ===== -->
+<script>
+(function(){
+  var STD14=["ตราด","ชุมพร","สุราษฏร์ธานี","ปัตตานี","สงขลา","หลังสวน","นราธิวาส","อ่างศิลา","สตูล","ภูเก็ต","ระนอง","สมุทรปราการ","สมุทรสาคร","นครศรีธรรมราช"];
+  function upd(){
+    var tb=document.getElementById('portTable'); if(!tb)return;
+    var txt=tb.innerText||''; if(txt.replace(/\s/g,'').length<10)return;
+    var miss=STD14.filter(function(p){return txt.indexOf(p)<0;});
+    var shown=14-miss.length;
+    var note=document.getElementById('portNote');
+    if(!note){
+      note=document.createElement('div'); note.id='portNote';
+      note.style.cssText='font-size:14px;color:#ff6b6b;margin-top:12px;line-height:1.55;';
+      var wrap=tb.closest('div'); (wrap&&wrap.parentNode)?wrap.parentNode.insertBefore(note,wrap.nextSibling):tb.parentNode.appendChild(note);
+    }
+    if(miss.length===0){
+      note.innerHTML='<b>*หมายเหตุ:</b> ข้อมูลสถิติประจำเดือนนี้ครอบคลุมท่าเทียบเรือครบทั้ง 14 แห่ง';
+    }else{
+      var full=miss.map(function(m){
+        var sp=["นครศรีธรรมราช","สมุทรปราการ","สมุทรสาคร"];
+        return (sp.indexOf(m)>=0?"สะพานปลา":"ท่าเทียบเรือประมง")+m;
+      }).join(", ");
+      note.innerHTML='<b>*หมายเหตุ:</b> ข้อมูลสถิติประจำเดือนนี้ครอบคลุมท่าเทียบเรือ '+shown+' แห่ง จากทั้งหมด 14 แห่ง (ยกเว้น'+full+' เนื่องจากไม่มีรายการบันทึกข้อมูลสัตว์น้ำผ่านท่าในระบบ TFCC ประจำเดือนนี้)';
+    }
+  }
+  function start(){
+    var tb=document.getElementById('portTable');
+    if(tb){ new MutationObserver(function(){setTimeout(upd,60);}).observe(tb,{childList:true,subtree:true}); upd(); }
+    else setTimeout(start,300);
+  }
+  if(document.readyState!=='loading')start(); else document.addEventListener('DOMContentLoaded',start);
+  setTimeout(upd,1600);
+})();
+</script>
+<!-- ===== จบหมายเหตุจำนวนท่า ===== -->
 </body>
 </html>
