@@ -2261,7 +2261,7 @@ render();
     <div style="font-weight:700;color:#13294D;font-size:15px;">🤖 ถาม-ตอบ AI (ข้อมูลสถิติสัตว์น้ำ)</div>
     <button id="aiCloseBtn" style="background:none;border:none;color:#64748B;font-size:20px;cursor:pointer;line-height:1;">✕</button>
   </div>
-  <div id="aiAnswerBox" style="padding:14px 16px;color:#1E293B;font-size:14px;line-height:1.6;overflow-y:auto;white-space:pre-wrap;border-bottom:1px solid #E2E8F0;flex:1 1 auto;background:#FFFFFF;"></div>
+  <div id="aiAnswerBox" style="padding:14px 16px;font-size:14px;line-height:1.6;overflow-y:auto;border-bottom:1px solid #E2E8F0;flex:1 1 auto;background:#FFFFFF;display:flex;flex-direction:column;gap:10px;"></div>
   <div style="padding:12px 14px;display:flex;gap:8px;flex:0 0 auto;background:#FFFFFF;">
     <textarea id="aiQInput" rows="2" placeholder="ถามเกี่ยวกับข้อมูลในระบบ เช่น ปัตตานีทำไมยอดตก, ปัตตานีเทียบสงขลา" style="flex:1;resize:none;border-radius:10px;border:1px solid #CBD5E1;background:#F7FAFC;color:#1E293B;padding:9px 11px;font-size:13.5px;font-family:inherit;"></textarea>
     <button id="aiAskBtn" style="background:linear-gradient(90deg,#1B6FA8,#36B7E6);color:#fff;border:none;border-radius:10px;padding:0 16px;font-weight:700;cursor:pointer;font-size:14px;">ถาม</button>
@@ -2328,19 +2328,37 @@ render();
     return ctx;
   }
 
+  function aiAddBubble(role, text){
+    var answerBox = document.getElementById('aiAnswerBox');
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;width:100%;' + (role==='user' ? 'justify-content:flex-end;' : 'justify-content:flex-start;');
+    var bubble = document.createElement('div');
+    bubble.style.cssText = 'max-width:85%;padding:9px 13px;border-radius:14px;white-space:pre-wrap;word-break:break-word;font-size:14px;line-height:1.6;' +
+      (role==='user'
+        ? 'background:#1B6FA8;color:#fff;border-bottom-right-radius:4px;'
+        : 'background:#F1F5F9;color:#1E293B;border-bottom-left-radius:4px;');
+    bubble.textContent = text;
+    row.appendChild(bubble);
+    answerBox.appendChild(row);
+    answerBox.scrollTop = answerBox.scrollHeight;
+    return bubble;
+  }
+
   function aiAsk(){
     var input = document.getElementById('aiQInput');
     var q = input.value.trim();
     if(!q) return;
-    var answerBox = document.getElementById('aiAnswerBox');
     var askBtn = document.getElementById('aiAskBtn');
-    answerBox.textContent = '🔄 กำลังวิเคราะห์...';
     askBtn.disabled = true;
     input.value = '';
 
+    aiAddBubble('user', q);
+    var aiBubble = aiAddBubble('ai', '🔄 กำลังวิเคราะห์...');
+    var answerBox = document.getElementById('aiAnswerBox');
+
     var ctx = aiBuildContext();
     if(ctx===null){
-      answerBox.textContent = '⚠️ ข้อมูลยังโหลดไม่เสร็จ รอสักครู่แล้วลองใหม่';
+      aiBubble.textContent = '⚠️ ข้อมูลยังโหลดไม่เสร็จ รอสักครู่แล้วลองใหม่';
       askBtn.disabled = false;
       return;
     }
@@ -2358,16 +2376,18 @@ render();
       clearTimeout(timer);
       askBtn.disabled = false;
       if(res.data && res.data.answer){
-        answerBox.textContent = res.data.answer;
+        aiBubble.textContent = res.data.answer;
       } else if(res.data && res.data.error){
-        answerBox.textContent = '⚠️ '+res.data.error;
+        aiBubble.textContent = '⚠️ '+res.data.error;
       } else {
-        answerBox.textContent = '⚠️ ไม่ได้รับคำตอบจากระบบ ลองใหม่อีกครั้ง';
+        aiBubble.textContent = '⚠️ ไม่ได้รับคำตอบจากระบบ ลองใหม่อีกครั้ง';
       }
+      answerBox.scrollTop = answerBox.scrollHeight;
     }).catch(function(err){
       clearTimeout(timer);
       askBtn.disabled = false;
-      answerBox.textContent = '⚠️ เชื่อมต่อไม่สำเร็จ ('+((err && err.message) ? err.message : 'ลองใหม่อีกครั้ง')+')';
+      aiBubble.textContent = '⚠️ เชื่อมต่อไม่สำเร็จ ('+((err && err.message) ? err.message : 'ลองใหม่อีกครั้ง')+')';
+      answerBox.scrollTop = answerBox.scrollHeight;
     });
   }
 
