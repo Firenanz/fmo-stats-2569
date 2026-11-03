@@ -2253,5 +2253,141 @@ render();
 })();
 
 </script>
+<!-- ===== AI Q&A กล่องถามตอบ (Gemini ผ่าน Cloudflare Worker) ===== -->
+<button id="aiFab" title="ถาม AI เกี่ยวกับข้อมูลสถิติ" style="position:fixed;bottom:24px;right:24px;width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,#1B6FA8,#36B7E6);color:#fff;border:none;font-size:26px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.35);z-index:9999;">🤖</button>
+
+<div id="aiPanel" class="hidden" style="position:fixed;bottom:92px;right:24px;width:380px;max-width:92vw;max-height:70vh;background:#1B3A66;border:1px solid #2C5187;border-radius:16px;box-shadow:0 12px 32px rgba(0,0,0,.45);z-index:9999;display:flex;flex-direction:column;overflow:hidden;font-family:'Sarabun','Noto Sans Thai',sans-serif;">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #2C5187;flex:0 0 auto;">
+    <div style="font-weight:700;color:#fff;font-size:15px;">🤖 ถาม-ตอบ AI (ข้อมูลสถิติสัตว์น้ำ)</div>
+    <button id="aiCloseBtn" style="background:none;border:none;color:#B6C6DF;font-size:20px;cursor:pointer;line-height:1;">✕</button>
+  </div>
+  <div id="aiAnswerBox" class="hidden" style="padding:14px 16px;color:#fff;font-size:14px;line-height:1.6;overflow-y:auto;max-height:40vh;white-space:pre-wrap;border-bottom:1px solid #2C5187;flex:0 1 auto;"></div>
+  <div style="padding:12px 14px;display:flex;gap:8px;flex:0 0 auto;">
+    <textarea id="aiQInput" rows="2" placeholder="ถามเกี่ยวกับข้อมูลในระบบ เช่น ปัตตานีทำไมยอดตก, ปัตตานีเทียบสงขลา" style="flex:1;resize:none;border-radius:10px;border:1px solid #2C5187;background:#13294D;color:#fff;padding:9px 11px;font-size:13.5px;font-family:inherit;"></textarea>
+    <button id="aiAskBtn" style="background:linear-gradient(90deg,#1B6FA8,#36B7E6);color:#fff;border:none;border-radius:10px;padding:0 16px;font-weight:700;cursor:pointer;font-size:14px;">ถาม</button>
+  </div>
+  <div style="padding:0 14px 12px;color:#7E93B4;font-size:11.5px;flex:0 0 auto;">⚠️ ตอบจาก AI (Gemini) วิเคราะห์จากข้อมูลสรุปในระบบ อาจมีข้อผิดพลาด ควรตรวจทานตัวเลขสำคัญก่อนใช้งานจริง</div>
+</div>
+
+<script>
+(function(){
+  var AI_WORKER_URL = 'https://tfcc-ai.firenanz-fmo.workers.dev';
+
+  function aiPad(n){ return String(n).length<2 ? '0'+n : String(n); }
+
+  function aiBuildContext(){
+    var E = window.__EMBED__;
+    if(!E || !E.rows || !E.rows.length) return null;
+    var rows = E.rows;
+    var minD=null, maxD=null;
+    var byPort={}, byPortMonth={}, byFish={};
+    for(var i=0;i<rows.length;i++){
+      var r = rows[i];
+      var d = (r.d instanceof Date) ? r.d : new Date(r.d);
+      if(!minD || d<minD) minD=d;
+      if(!maxD || d>maxD) maxD=d;
+      var ym = d.getFullYear()+'-'+aiPad(d.getMonth()+1);
+      if(!byPort[r.port]) byPort[r.port]={w:0,rev:0,trips:{}};
+      byPort[r.port].w+=(r.w||0); byPort[r.port].rev+=(r.rev||0); byPort[r.port].trips[r.dld]=1;
+      var pk = r.port+'|'+ym;
+      if(!byPortMonth[pk]) byPortMonth[pk]={port:r.port,ym:ym,w:0,rev:0,trips:{}};
+      byPortMonth[pk].w+=(r.w||0); byPortMonth[pk].rev+=(r.rev||0); byPortMonth[pk].trips[r.dld]=1;
+      var fk = r.fish || '(ไม่ระบุ)';
+      if(!byFish[fk]) byFish[fk]={w:0};
+      byFish[fk].w += (r.w||0);
+    }
+    function ymd(d){ return d.getFullYear()+'-'+aiPad(d.getMonth()+1)+'-'+aiPad(d.getDate()); }
+    function countKeys(o){ var c=0; for(var k in o) c++; return c; }
+
+    var portList = Object.keys(byPort).sort(function(a,b){return byPort[b].w-byPort[a].w;});
+    var ctx = 'ข้อมูลสถิติสัตว์น้ำผ่านท่าขององค์การสะพานปลา (อสป.) ช่วง '+ymd(minD)+' ถึง '+ymd(maxD)+'\n\n';
+    ctx += 'สรุปรายท่า (เรียงน้ำหนักมากไปน้อย):\n';
+    for(var pi=0;pi<portList.length;pi++){
+      var p = portList[pi], pd = byPort[p];
+      ctx += '- '+p+': น้ำหนัก '+Math.round(pd.w)+' กก., รายได้ประมาณ '+Math.round(pd.rev)+' บาท, '+countKeys(pd.trips)+' เที่ยวเรือ\n';
+    }
+
+    var pmKeys = Object.keys(byPortMonth).sort(function(a,b){
+      var pa=byPortMonth[a], pb=byPortMonth[b];
+      if(pa.port!==pb.port) return pa.port<pb.port?-1:1;
+      return pa.ym<pb.ym?-1:(pa.ym>pb.ym?1:0);
+    });
+    ctx += '\nรายท่า-รายเดือน:\n';
+    for(var ki=0;ki<pmKeys.length;ki++){
+      var md = byPortMonth[pmKeys[ki]];
+      ctx += '- '+md.port+' '+md.ym+': '+Math.round(md.w)+' กก., '+Math.round(md.rev)+' บาท, '+countKeys(md.trips)+' เที่ยว\n';
+    }
+
+    var fishList = Object.keys(byFish).map(function(f){return {name:f, w:byFish[f].w};}).sort(function(a,b){return b.w-a.w;}).slice(0,15);
+    ctx += '\nสัตว์น้ำ 15 อันดับแรกตามน้ำหนักรวมทุกท่า:\n';
+    for(var fi=0;fi<fishList.length;fi++){
+      ctx += (fi+1)+'. '+fishList[fi].name+': '+Math.round(fishList[fi].w)+' กก.\n';
+    }
+    return ctx;
+  }
+
+  function aiAsk(){
+    var input = document.getElementById('aiQInput');
+    var q = input.value.trim();
+    if(!q) return;
+    var answerBox = document.getElementById('aiAnswerBox');
+    var askBtn = document.getElementById('aiAskBtn');
+    answerBox.classList.remove('hidden');
+    answerBox.textContent = '🔄 กำลังวิเคราะห์...';
+    askBtn.disabled = true;
+
+    var ctx = aiBuildContext();
+    if(ctx===null){
+      answerBox.textContent = '⚠️ ข้อมูลยังโหลดไม่เสร็จ รอสักครู่แล้วลองใหม่';
+      askBtn.disabled = false;
+      return;
+    }
+
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort(); }, 20000);
+    fetch(AI_WORKER_URL, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({question:q, context:ctx}),
+      signal: ctrl.signal
+    }).then(function(r){
+      return r.json().then(function(data){ return {status:r.status, data:data}; });
+    }).then(function(res){
+      clearTimeout(timer);
+      askBtn.disabled = false;
+      if(res.data && res.data.answer){
+        answerBox.textContent = res.data.answer;
+      } else if(res.data && res.data.error){
+        answerBox.textContent = '⚠️ '+res.data.error;
+      } else {
+        answerBox.textContent = '⚠️ ไม่ได้รับคำตอบจากระบบ ลองใหม่อีกครั้ง';
+      }
+    }).catch(function(err){
+      clearTimeout(timer);
+      askBtn.disabled = false;
+      answerBox.textContent = '⚠️ เชื่อมต่อไม่สำเร็จ ('+((err && err.message) ? err.message : 'ลองใหม่อีกครั้ง')+')';
+    });
+  }
+
+  function aiToggle(){
+    document.getElementById('aiPanel').classList.toggle('hidden');
+  }
+
+  function aiWire(){
+    var fab = document.getElementById('aiFab');
+    var closeBtn = document.getElementById('aiCloseBtn');
+    var askBtn = document.getElementById('aiAskBtn');
+    var input = document.getElementById('aiQInput');
+    if(fab) fab.onclick = aiToggle;
+    if(closeBtn) closeBtn.onclick = aiToggle;
+    if(askBtn) askBtn.onclick = aiAsk;
+    if(input) input.addEventListener('keydown', function(e){
+      if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); aiAsk(); }
+    });
+  }
+  if(document.readyState!=='loading') aiWire(); else document.addEventListener('DOMContentLoaded', aiWire);
+})();
+</script>
+
 </body>
 </html>
