@@ -2280,23 +2280,37 @@ render();
     if(!E || !E.rows || !E.rows.length) return null;
     var rows = E.rows;
     var minD=null, maxD=null;
-    var byPort={}, byPortMonth={}, byFish={};
-    var ports = E.ports || [], fishes = E.fishes || [];
+    var byPort={}, byPortMonth={}, byFish={}, byPortGear={}, byPortBtype={}, byPortBsize={};
+    var ports = E.ports || [], fishes = E.fishes || [], gears = E.gears || [], btypes = E.btypes || [], bsizes = E.bsizes || [];
     var minYmd=null, maxYmd=null;
+    function ymdToDate(ymdInt){ var y=Math.floor(ymdInt/10000)-543, m=Math.floor(ymdInt/100)%100, d=ymdInt%100; return Date.UTC(y,m-1,d); }
     for(var i=0;i<rows.length;i++){
       var a = rows[i];
-      var dld=a[0], ymdInt=a[1], port=ports[a[2]]||'(ไม่ระบุ)', fish=fishes[a[7]]||'(ไม่ระบุ)', w=a[8]||0, rev=a[9]||0;
+      var dld=a[0], ymdInt=a[1], port=ports[a[2]]||'(ไม่ระบุ)',
+        btype=btypes[a[4]]||'(ไม่ระบุ)', bsize=bsizes[a[5]]||'(ไม่ระบุ)', gear=gears[a[6]]||'(ไม่ระบุ)',
+        fish=fishes[a[7]]||'(ไม่ระบุ)', w=a[8]||0, rev=a[9]||0;
       if(minYmd===null || ymdInt<minYmd) minYmd=ymdInt;
       if(maxYmd===null || ymdInt>maxYmd) maxYmd=ymdInt;
       var y=Math.floor(ymdInt/10000), m=Math.floor(ymdInt/100)%100;
       var ym = y+'-'+aiPad(m);
-      if(!byPort[port]) byPort[port]={w:0,rev:0,trips:{}};
+      if(!byPort[port]) byPort[port]={w:0,rev:0,trips:{},minYmd:ymdInt,maxYmd:ymdInt};
       byPort[port].w+=w; byPort[port].rev+=rev; byPort[port].trips[dld]=1;
+      if(ymdInt<byPort[port].minYmd) byPort[port].minYmd=ymdInt;
+      if(ymdInt>byPort[port].maxYmd) byPort[port].maxYmd=ymdInt;
       var pk = port+'|'+ym;
       if(!byPortMonth[pk]) byPortMonth[pk]={port:port,ym:ym,w:0,rev:0,trips:{}};
       byPortMonth[pk].w+=w; byPortMonth[pk].rev+=rev; byPortMonth[pk].trips[dld]=1;
       if(!byFish[fish]) byFish[fish]={w:0};
       byFish[fish].w += w;
+      var pgk = port+'|'+gear;
+      if(!byPortGear[pgk]) byPortGear[pgk]={port:port,gear:gear,trips:{}};
+      byPortGear[pgk].trips[dld]=1;
+      var pbtk = port+'|'+btype;
+      if(!byPortBtype[pbtk]) byPortBtype[pbtk]={port:port,btype:btype,trips:{}};
+      byPortBtype[pbtk].trips[dld]=1;
+      var pbsk = port+'|'+bsize;
+      if(!byPortBsize[pbsk]) byPortBsize[pbsk]={port:port,bsize:bsize,trips:{}};
+      byPortBsize[pbsk].trips[dld]=1;
     }
     function ymdStr(ymdInt){ var y=Math.floor(ymdInt/10000), m=Math.floor(ymdInt/100)%100, d=ymdInt%100; return y+'-'+aiPad(m)+'-'+aiPad(d); }
     function countKeys(o){ var c=0; for(var k in o) c++; return c; }
@@ -2307,12 +2321,52 @@ render();
       + 'ห้ามเขียนสมการบวกต่อเนื่องในประโยคเดียว เช่น "มีนา 2,000 + เมษา 5,000 + พฤษภา 7,000 = 14,000" '
       + 'ให้แสดงแต่ละเดือน/แต่ละรายการเป็นบรรทัดแยก (bullet หรือแถวตาราง) แล้วสรุปยอดรวมเป็นบรรทัดสุดท้ายต่างหากพร้อมป้ายกำกับชัดเจนว่าเป็นผลรวมของอะไร '
       + 'ใส่หน่วย (กก., บาท, เที่ยว) กำกับทุกตัวเลข ไม่ใช้สัญลักษณ์ที่สื่อความกำกวม '
-      + 'เวลาแจกแจงเป็นหลายหัวข้อย่อย ห้ามใช้เลข "1." ซ้ำกันทุกหัวข้อ (เช่น ขึ้นต้นด้วย 1. ทุกอัน) ให้ใช้หัวข้อตัวหนา (**หัวข้อ:**) แทน หรือถ้าจะไล่เลขจริงๆ ให้นับต่อเนื่อง 1. 2. 3. ไม่วนกลับไปเลข 1 ใหม่\n\n';
+      + 'เวลาแจกแจงเป็นหลายหัวข้อย่อย ห้ามใช้เลข "1." ซ้ำกันทุกหัวข้อ (เช่น ขึ้นต้นด้วย 1. ทุกอัน) ให้ใช้หัวข้อตัวหนา (**หัวข้อ:**) แทน หรือถ้าจะไล่เลขจริงๆ ให้นับต่อเนื่อง 1. 2. 3. ไม่วนกลับไปเลข 1 ใหม่ '
+      + 'สำคัญมาก: ข้อมูลด้านล่างนี้ครอบคลุมหลายมิติ (รายท่า, ฝั่งทะเล, เครื่องมือประมง, ประเภทเรือ, ขนาดเรือ, ชนิดสัตว์น้ำ, รายเดือน) ก่อนจะตอบว่า "ไม่มีข้อมูล" ให้ตรวจสอบทุกมิติด้านล่างก่อนเสมอว่ามีอะไรเกี่ยวข้องกับคำถามบ้าง แล้วใช้สิ่งที่มีตอบให้ได้มากที่สุด '
+      + 'เช่น ถ้าถามเรื่อง "เรือที่ทำการต่างกันไหม" ให้ดูข้อมูลเครื่องมือประมง/ประเภทเรือ/ขนาดเรือของแต่ละท่ามาเปรียบเทียบ ถ้าถามเรื่อง "บริเวณที่ออกไปจับ" ให้ใช้ข้อมูลฝั่งทะเลของท่าตอบคร่าวๆ ก่อน '
+      + 'ตอบว่าไม่มีข้อมูลเฉพาะกรณีที่ตรวจสอบครบทุกมิติแล้วจริงๆ ไม่มีอะไรเกี่ยวข้องเลย (เช่น ถ้าถามพิกัด GPS แม่นยำ ซึ่งระบบนี้ไม่เก็บจริงๆ) และถ้าจำเป็นต้องบอกว่าไม่มี ให้บอกหลังจากตอบส่วนที่ตอบได้ไปแล้วเท่านั้น พยายามตีความเจตนาคำถามของผู้ใช้ ไม่ใช่ตอบตรงตัวอักษรแบบเครื่องจักร\n\n';
     ctx += 'ข้อมูลสถิติสัตว์น้ำผ่านท่าขององค์การสะพานปลา (อสป.) ช่วง '+ymdStr(minYmd)+' ถึง '+ymdStr(maxYmd)+' (ปี พ.ศ.)\n\n';
+    ctx += 'หมายเหตุขอบเขตข้อมูล: ระบบนี้เก็บข้อมูลระดับ "ท่าเทียบเรือ" ที่สัตว์น้ำขึ้นท่า ไม่มีพิกัด GPS จุดที่เรือออกไปจับจริง '
+      + 'แต่ทราบว่าแต่ละท่าตั้งอยู่ฝั่งทะเลใด (อ่าวไทย หรือ อันดามัน) ซึ่งพอใช้บอกคร่าวๆ ได้ว่าเรือของท่านั้นๆ ทำประมงในน่านน้ำฝั่งไหน\n\n';
     ctx += 'สรุปรายท่า (เรียงน้ำหนักมากไปน้อย):\n';
+    var ANDAMAN_PORTS = ['ภูเก็ต','ระนอง','สตูล','ตรัง','กระบี่','พังงา'];
+    function aiSideOf(port){ var p=String(port||''); for(var k=0;k<ANDAMAN_PORTS.length;k++){ if(p.indexOf(ANDAMAN_PORTS[k])>=0) return 'อันดามัน'; } return 'อ่าวไทย'; }
     for(var pi=0;pi<portList.length;pi++){
       var p = portList[pi], pd = byPort[p];
-      ctx += '- '+p+': น้ำหนัก '+Math.round(pd.w)+' กก., รายได้ประมาณ '+Math.round(pd.rev)+' บาท, '+countKeys(pd.trips)+' เที่ยวเรือ\n';
+      var nTrips = countKeys(pd.trips);
+      var daySpan = Math.round((ymdToDate(pd.maxYmd)-ymdToDate(pd.minYmd))/86400000)+1;
+      var tripsPerDay = daySpan>0 ? (nTrips/daySpan) : 0;
+      ctx += '- '+p+' (ฝั่ง'+aiSideOf(p)+'): น้ำหนัก '+Math.round(pd.w)+' กก., รายได้ประมาณ '+Math.round(pd.rev)+' บาท, '+nTrips+' เที่ยวเรือ ('+ymdStr(pd.minYmd)+' ถึง '+ymdStr(pd.maxYmd)+', เฉลี่ย '+tripsPerDay.toFixed(2)+' เที่ยว/วัน)\n';
+    }
+
+    // เครื่องมือประมงที่ใช้มากสุด 3 อันดับต่อท่า (นับจากจำนวนเที่ยวเรือ)
+    ctx += '\nเครื่องมือประมงที่ใช้ (3 อันดับแรกต่อท่า โดยจำนวนเที่ยวเรือ):\n';
+    for(var pi2=0;pi2<portList.length;pi2++){
+      var p2 = portList[pi2];
+      var gearRows = Object.keys(byPortGear).filter(function(k){return byPortGear[k].port===p2;})
+        .map(function(k){return {gear:byPortGear[k].gear, n:countKeys(byPortGear[k].trips)};})
+        .sort(function(a,b){return b.n-a.n;}).slice(0,3);
+      ctx += '- '+p2+': '+gearRows.map(function(g){return g.gear+' ('+g.n+' เที่ยว)';}).join(', ')+'\n';
+    }
+
+    // ประเภทเรือต่อท่า
+    ctx += '\nประเภทเรือที่เข้าท่า (ต่อท่า โดยจำนวนเที่ยวเรือ):\n';
+    for(var pi3=0;pi3<portList.length;pi3++){
+      var p3 = portList[pi3];
+      var btRows = Object.keys(byPortBtype).filter(function(k){return byPortBtype[k].port===p3;})
+        .map(function(k){return {btype:byPortBtype[k].btype, n:countKeys(byPortBtype[k].trips)};})
+        .sort(function(a,b){return b.n-a.n;});
+      ctx += '- '+p3+': '+btRows.map(function(b){return b.btype+' ('+b.n+' เที่ยว)';}).join(', ')+'\n';
+    }
+
+    // ขนาดเรือต่อท่า
+    ctx += '\nขนาดเรือที่เข้าท่า (ต่อท่า โดยจำนวนเที่ยวเรือ):\n';
+    for(var pi4=0;pi4<portList.length;pi4++){
+      var p4 = portList[pi4];
+      var bsRows = Object.keys(byPortBsize).filter(function(k){return byPortBsize[k].port===p4;})
+        .map(function(k){return {bsize:byPortBsize[k].bsize, n:countKeys(byPortBsize[k].trips)};})
+        .sort(function(a,b){return b.n-a.n;});
+      ctx += '- '+p4+': '+bsRows.map(function(b){return b.bsize+' ('+b.n+' เที่ยว)';}).join(', ')+'\n';
     }
 
     var pmKeys = Object.keys(byPortMonth).sort(function(a,b){
