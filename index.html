@@ -2346,7 +2346,7 @@ render();
     }
 
     var ctrl = new AbortController();
-    var timer = setTimeout(function(){ ctrl.abort(); }, 20000);
+    var timer = setTimeout(function(){ ctrl.abort(); }, 45000);
     fetch(AI_WORKER_URL, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
