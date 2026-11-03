@@ -2256,17 +2256,17 @@ render();
 <!-- ===== AI Q&A กล่องถามตอบ (Gemini ผ่าน Cloudflare Worker) ===== -->
 <button id="aiFab" title="ถาม AI เกี่ยวกับข้อมูลสถิติ" style="position:fixed;bottom:24px;right:24px;width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,#1B6FA8,#36B7E6);color:#fff;border:none;font-size:26px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.35);z-index:9999;">🤖</button>
 
-<div id="aiPanel" class="hidden" style="position:fixed;bottom:24px;right:24px;width:420px;max-width:92vw;height:92vh;max-height:92vh;background:#1B3A66;border:1px solid #2C5187;border-radius:16px;box-shadow:0 12px 32px rgba(0,0,0,.45);z-index:9999;display:flex;flex-direction:column;overflow:hidden;font-family:'Sarabun','Noto Sans Thai',sans-serif;">
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #2C5187;flex:0 0 auto;">
-    <div style="font-weight:700;color:#fff;font-size:15px;">🤖 ถาม-ตอบ AI (ข้อมูลสถิติสัตว์น้ำ)</div>
-    <button id="aiCloseBtn" style="background:none;border:none;color:#B6C6DF;font-size:20px;cursor:pointer;line-height:1;">✕</button>
+<div id="aiPanel" class="hidden" style="position:fixed;bottom:24px;right:24px;width:420px;max-width:92vw;height:92vh;max-height:92vh;background:#FFFFFF;border:1px solid #D7E1EC;border-radius:16px;box-shadow:0 12px 32px rgba(0,0,0,.45);z-index:9999;display:flex;flex-direction:column;overflow:hidden;font-family:'Sarabun','Noto Sans Thai',sans-serif;">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #E2E8F0;flex:0 0 auto;background:#EFF4FA;">
+    <div style="font-weight:700;color:#13294D;font-size:15px;">🤖 ถาม-ตอบ AI (ข้อมูลสถิติสัตว์น้ำ)</div>
+    <button id="aiCloseBtn" style="background:none;border:none;color:#64748B;font-size:20px;cursor:pointer;line-height:1;">✕</button>
   </div>
-  <div id="aiAnswerBox" style="padding:14px 16px;color:#fff;font-size:14px;line-height:1.6;overflow-y:auto;white-space:pre-wrap;border-bottom:1px solid #2C5187;flex:1 1 auto;"></div>
-  <div style="padding:12px 14px;display:flex;gap:8px;flex:0 0 auto;">
-    <textarea id="aiQInput" rows="2" placeholder="ถามเกี่ยวกับข้อมูลในระบบ เช่น ปัตตานีทำไมยอดตก, ปัตตานีเทียบสงขลา" style="flex:1;resize:none;border-radius:10px;border:1px solid #2C5187;background:#13294D;color:#fff;padding:9px 11px;font-size:13.5px;font-family:inherit;"></textarea>
+  <div id="aiAnswerBox" style="padding:14px 16px;color:#1E293B;font-size:14px;line-height:1.6;overflow-y:auto;white-space:pre-wrap;border-bottom:1px solid #E2E8F0;flex:1 1 auto;background:#FFFFFF;"></div>
+  <div style="padding:12px 14px;display:flex;gap:8px;flex:0 0 auto;background:#FFFFFF;">
+    <textarea id="aiQInput" rows="2" placeholder="ถามเกี่ยวกับข้อมูลในระบบ เช่น ปัตตานีทำไมยอดตก, ปัตตานีเทียบสงขลา" style="flex:1;resize:none;border-radius:10px;border:1px solid #CBD5E1;background:#F7FAFC;color:#1E293B;padding:9px 11px;font-size:13.5px;font-family:inherit;"></textarea>
     <button id="aiAskBtn" style="background:linear-gradient(90deg,#1B6FA8,#36B7E6);color:#fff;border:none;border-radius:10px;padding:0 16px;font-weight:700;cursor:pointer;font-size:14px;">ถาม</button>
   </div>
-  <div style="padding:0 14px 12px;color:#7E93B4;font-size:11.5px;flex:0 0 auto;">⚠️ ตอบจาก AI (Gemini) วิเคราะห์จากข้อมูลสรุปในระบบ อาจมีข้อผิดพลาด ควรตรวจทานตัวเลขสำคัญก่อนใช้งานจริง</div>
+  <div style="padding:0 14px 12px;color:#64748B;font-size:11.5px;flex:0 0 auto;background:#FFFFFF;">⚠️ ตอบจาก AI (Gemini) วิเคราะห์จากข้อมูลสรุปในระบบ อาจมีข้อผิดพลาด ควรตรวจทานตัวเลขสำคัญก่อนใช้งานจริง</div>
 </div>
 
 <script>
@@ -2336,6 +2336,7 @@ render();
     var askBtn = document.getElementById('aiAskBtn');
     answerBox.textContent = '🔄 กำลังวิเคราะห์...';
     askBtn.disabled = true;
+    input.value = '';
 
     var ctx = aiBuildContext();
     if(ctx===null){
