@@ -2281,26 +2281,28 @@ render();
     var rows = E.rows;
     var minD=null, maxD=null;
     var byPort={}, byPortMonth={}, byFish={};
+    var ports = E.ports || [], fishes = E.fishes || [];
+    var minYmd=null, maxYmd=null;
     for(var i=0;i<rows.length;i++){
-      var r = rows[i];
-      var d = (r.d instanceof Date) ? r.d : new Date(r.d);
-      if(!minD || d<minD) minD=d;
-      if(!maxD || d>maxD) maxD=d;
-      var ym = d.getFullYear()+'-'+aiPad(d.getMonth()+1);
-      if(!byPort[r.port]) byPort[r.port]={w:0,rev:0,trips:{}};
-      byPort[r.port].w+=(r.w||0); byPort[r.port].rev+=(r.rev||0); byPort[r.port].trips[r.dld]=1;
-      var pk = r.port+'|'+ym;
-      if(!byPortMonth[pk]) byPortMonth[pk]={port:r.port,ym:ym,w:0,rev:0,trips:{}};
-      byPortMonth[pk].w+=(r.w||0); byPortMonth[pk].rev+=(r.rev||0); byPortMonth[pk].trips[r.dld]=1;
-      var fk = r.fish || '(ไม่ระบุ)';
-      if(!byFish[fk]) byFish[fk]={w:0};
-      byFish[fk].w += (r.w||0);
+      var a = rows[i];
+      var dld=a[0], ymdInt=a[1], port=ports[a[2]]||'(ไม่ระบุ)', fish=fishes[a[7]]||'(ไม่ระบุ)', w=a[8]||0, rev=a[9]||0;
+      if(minYmd===null || ymdInt<minYmd) minYmd=ymdInt;
+      if(maxYmd===null || ymdInt>maxYmd) maxYmd=ymdInt;
+      var y=Math.floor(ymdInt/10000), m=Math.floor(ymdInt/100)%100;
+      var ym = y+'-'+aiPad(m);
+      if(!byPort[port]) byPort[port]={w:0,rev:0,trips:{}};
+      byPort[port].w+=w; byPort[port].rev+=rev; byPort[port].trips[dld]=1;
+      var pk = port+'|'+ym;
+      if(!byPortMonth[pk]) byPortMonth[pk]={port:port,ym:ym,w:0,rev:0,trips:{}};
+      byPortMonth[pk].w+=w; byPortMonth[pk].rev+=rev; byPortMonth[pk].trips[dld]=1;
+      if(!byFish[fish]) byFish[fish]={w:0};
+      byFish[fish].w += w;
     }
-    function ymd(d){ return d.getFullYear()+'-'+aiPad(d.getMonth()+1)+'-'+aiPad(d.getDate()); }
+    function ymdStr(ymdInt){ var y=Math.floor(ymdInt/10000), m=Math.floor(ymdInt/100)%100, d=ymdInt%100; return y+'-'+aiPad(m)+'-'+aiPad(d); }
     function countKeys(o){ var c=0; for(var k in o) c++; return c; }
 
     var portList = Object.keys(byPort).sort(function(a,b){return byPort[b].w-byPort[a].w;});
-    var ctx = 'ข้อมูลสถิติสัตว์น้ำผ่านท่าขององค์การสะพานปลา (อสป.) ช่วง '+ymd(minD)+' ถึง '+ymd(maxD)+'\n\n';
+    var ctx = 'ข้อมูลสถิติสัตว์น้ำผ่านท่าขององค์การสะพานปลา (อสป.) ช่วง '+ymdStr(minYmd)+' ถึง '+ymdStr(maxYmd)+' (ปี พ.ศ.)\n\n';
     ctx += 'สรุปรายท่า (เรียงน้ำหนักมากไปน้อย):\n';
     for(var pi=0;pi<portList.length;pi++){
       var p = portList[pi], pd = byPort[p];
