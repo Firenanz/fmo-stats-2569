@@ -2213,7 +2213,7 @@ function renderRelate(){
 
 
 /* ===== bootstrap ===== */
-(function(){ const mi=DATA.dims.mon.cats.indexOf("เมษายน 2569"); if(mi>=0) state.filters.mon=mi; })();
+(function(){ const mi=DATA.dims.mon.cats.length-1; if(mi>=0) state.filters.mon=mi; })(); // ล็อกเดือนล่าสุดอัตโนมัติเสมอ (เดือนสุดท้ายใน array)
 window.__REGMAP__={};
 if(DATA.regList&&DATA.regName){for(let ri=0;ri<DATA.regList.length;ri++){window.__REGMAP__[DATA.regList[ri]]=DATA.regName[ri];}}
 window.XP={ setMode:setMode, toCompare:toCompare, toggleBoats:toggleBoats, renderBoats:renderBoats,
