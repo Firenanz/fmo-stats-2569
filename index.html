@@ -1006,9 +1006,10 @@ function computeBounds(){let mn=null,mx=null;for(const r of RECORDS){const k=ymd
 
 function initFilter(){
   FROM={...MIND}; TO={...MAXD};
-  (function(){ // ล็อกค่าเริ่มต้นเป็นพฤษภาคม 2569 ถ้ามีข้อมูลเดือนนี้
-    var may={y:2569,m:5,d:1}, mayEnd={y:2569,m:5,d:daysInMonth(2569,5)};
-    if(ymd(may)>=ymd(MIND) && ymd(mayEnd)<=ymd(MAXD)){ FROM=may; TO=mayEnd; }
+  (function(){ // ล็อกค่าเริ่มต้นเป็นเดือนล่าสุดที่มีข้อมูลเสมอ (อัตโนมัติตาม MAXD ไม่ต้องแก้มือทุกเดือน)
+    var y=MAXD.y, m=MAXD.m;
+    var start={y:y,m:m,d:1}, end={y:y,m:m,d:daysInMonth(y,m)};
+    if(ymd(start)>=ymd(MIND)){ FROM=start; TO=(ymd(end)<=ymd(MAXD)?end:{...MAXD}); }
   })();
   const years=new Set(); RECORDS.forEach(r=>years.add(r.d.m>=10?r.d.y+1:r.d.y));
   const fySel=$('#fySelect'); fySel.innerHTML='';
@@ -2263,7 +2264,7 @@ render();
   </div>
   <div id="aiAnswerBox" style="padding:14px 16px;font-size:14px;line-height:1.6;overflow-y:auto;border-bottom:1px solid #E2E8F0;flex:1 1 auto;background:#FFFFFF;display:flex;flex-direction:column;gap:10px;"></div>
   <div style="padding:12px 14px;display:flex;gap:8px;flex:0 0 auto;background:#FFFFFF;">
-    <textarea id="aiQInput" rows="2" placeholder="ถามเกี่ยวกับข้อมูลในระบบ เช่น ปัตตานีทำไมยอดตก, ปัตตานีเทียบสงขลา" style="flex:1;resize:none;border-radius:10px;border:1px solid #CBD5E1;background:#F7FAFC;color:#1E293B;padding:9px 11px;font-size:13.5px;font-family:inherit;"></textarea>
+    <textarea id="aiQInput" rows="2" placeholder="ถามเกี่ยวกับข้อมูลสถิติในระบบ เช่น ปัตตานีรายได้เฉลี่ยต่อเดือนเท่าไหร่, ปัตตานีเทียบสงขลา" style="flex:1;resize:none;border-radius:10px;border:1px solid #CBD5E1;background:#F7FAFC;color:#1E293B;padding:9px 11px;font-size:13.5px;font-family:inherit;"></textarea>
     <button id="aiAskBtn" style="background:linear-gradient(90deg,#1B6FA8,#36B7E6);color:#fff;border:none;border-radius:10px;padding:0 16px;font-weight:700;cursor:pointer;font-size:14px;">ถาม</button>
   </div>
   <div style="padding:0 14px 12px;color:#64748B;font-size:11.5px;flex:0 0 auto;background:#FFFFFF;">⚠️ ตอบจาก AI (Gemini) วิเคราะห์จากข้อมูลสรุปในระบบ อาจมีข้อผิดพลาด ควรตรวจทานตัวเลขสำคัญก่อนใช้งานจริง</div>
