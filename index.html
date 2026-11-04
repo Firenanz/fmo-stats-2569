@@ -2479,13 +2479,15 @@ render();
     return bubble;
   }
 
+  var aiHistory = [];
+
   function aiFetchOnce(q, ctx){
     var ctrl = new AbortController();
     var timer = setTimeout(function(){ ctrl.abort(); }, 45000);
     return fetch(AI_WORKER_URL, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({question:q, context:ctx}),
+      body: JSON.stringify({question:q, context:ctx, history:aiHistory}),
       signal: ctrl.signal
     }).then(function(r){
       return r.json().then(function(data){ clearTimeout(timer); return {status:r.status, data:data}; });
@@ -2524,7 +2526,11 @@ render();
 
     function finish(ans, errMsg){
       askBtn.disabled = false;
-      if(ans){ aiBubble.innerHTML = aiMdToHtml(ans); }
+      if(ans){
+        aiBubble.innerHTML = aiMdToHtml(ans);
+        aiHistory.push({q:q, a:ans});
+        if(aiHistory.length > 6) aiHistory = aiHistory.slice(-6);
+      }
       else if(errMsg){ aiBubble.textContent = '⚠️ '+errMsg; }
       else { aiBubble.textContent = '⚠️ ไม่ได้รับคำตอบจากระบบ ลองใหม่อีกครั้ง'; }
       answerBox.scrollTop = answerBox.scrollHeight;
