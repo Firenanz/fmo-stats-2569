@@ -2478,6 +2478,30 @@ render();
     return bubble;
   }
 
+  function aiFetchOnce(q, ctx){
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort(); }, 45000);
+    return fetch(AI_WORKER_URL, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({question:q, context:ctx}),
+      signal: ctrl.signal
+    }).then(function(r){
+      return r.json().then(function(data){ clearTimeout(timer); return {status:r.status, data:data}; });
+    }, function(err){ clearTimeout(timer); throw err; });
+  }
+
+  function aiLooksTruncated(ans){ // เดาว่าคำตอบถูกตัดกลางคัน (เช่น ตารางมีแต่หัว ไม่มีข้อมูล)
+    var t = (ans||'').trim();
+    if(t.length < 40) return true;
+    var tableLines = t.split('\n').filter(function(l){ return /^\s*\|/.test(l); });
+    if(tableLines.length===1) return true; // มีแค่หัวตาราง ไม่มีแถวข้อมูล
+    var lines = t.split('\n').filter(function(l){ return l.trim().length; });
+    var last = lines[lines.length-1];
+    if(/^\s*\|/.test(last) && tableLines.length < 3) return true; // จบที่แถวตาราง และมีแถวน้อยผิดปกติ
+    return false;
+  }
+
   function aiAsk(){
     var input = document.getElementById('aiQInput');
     var q = input.value.trim();
@@ -2497,31 +2521,34 @@ render();
       return;
     }
 
-    var ctrl = new AbortController();
-    var timer = setTimeout(function(){ ctrl.abort(); }, 45000);
-    fetch(AI_WORKER_URL, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({question:q, context:ctx}),
-      signal: ctrl.signal
-    }).then(function(r){
-      return r.json().then(function(data){ return {status:r.status, data:data}; });
-    }).then(function(res){
-      clearTimeout(timer);
+    function finish(ans, errMsg){
       askBtn.disabled = false;
-      if(res.data && res.data.answer){
-        aiBubble.innerHTML = aiMdToHtml(res.data.answer);
-      } else if(res.data && res.data.error){
-        aiBubble.textContent = '⚠️ '+res.data.error;
-      } else {
-        aiBubble.textContent = '⚠️ ไม่ได้รับคำตอบจากระบบ ลองใหม่อีกครั้ง';
+      if(ans){ aiBubble.innerHTML = aiMdToHtml(ans); }
+      else if(errMsg){ aiBubble.textContent = '⚠️ '+errMsg; }
+      else { aiBubble.textContent = '⚠️ ไม่ได้รับคำตอบจากระบบ ลองใหม่อีกครั้ง'; }
+      answerBox.scrollTop = answerBox.scrollHeight;
+    }
+
+    aiFetchOnce(q, ctx).then(function(res){
+      var ans = res.data && res.data.answer;
+      if(ans && aiLooksTruncated(ans)){
+        aiBubble.innerHTML = aiMdToHtml(ans) + '<div style="margin-top:6px;opacity:.6;font-size:12px;">🔄 คำตอบอาจไม่สมบูรณ์ กำลังลองใหม่ให้อัตโนมัติ...</div>';
+        answerBox.scrollTop = answerBox.scrollHeight;
+        return aiFetchOnce(q, ctx).then(function(res2){
+          var ans2 = res2.data && res2.data.answer;
+          if(ans2 && !aiLooksTruncated(ans2)){ finish(ans2); }
+          else if(ans2 && ans2.length > ans.length){ finish(ans2); }
+          else {
+            finish(ans);
+            aiBubble.innerHTML += '<div style="margin-top:6px;color:#b45309;font-size:12px;">⚠️ คำตอบอาจไม่สมบูรณ์ ลองถามใหม่อีกครั้งได้ครับ</div>';
+          }
+        });
       }
-      answerBox.scrollTop = answerBox.scrollHeight;
+      if(ans){ finish(ans); }
+      else if(res.data && res.data.error){ finish(null, res.data.error); }
+      else { finish(null, null); }
     }).catch(function(err){
-      clearTimeout(timer);
-      askBtn.disabled = false;
-      aiBubble.textContent = '⚠️ เชื่อมต่อไม่สำเร็จ ('+((err && err.message) ? err.message : 'ลองใหม่อีกครั้ง')+')';
-      answerBox.scrollTop = answerBox.scrollHeight;
+      finish(null, (err && err.message) ? 'เชื่อมต่อไม่สำเร็จ ('+err.message+')' : 'เชื่อมต่อไม่สำเร็จ ลองใหม่อีกครั้ง');
     });
   }
 
