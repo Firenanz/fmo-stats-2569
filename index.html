@@ -1657,9 +1657,13 @@ window.addEventListener('afterprint',()=>{_repBuilt=false;});
 
 (async function(){
   try{
-    const manifest = await fetch('data/manifest.json').then(r=>r.json());
-    const lookup = await fetch('data/lookup.json').then(r=>r.json());
-    const monthsData = await Promise.all(manifest.months.map(m=>fetch('data/rows-'+m+'.json').then(r=>r.json())));
+    // กัน CDN/browser cache ค้างข้อมูลเก่าหลัง push เดือนใหม่ (พบจริง พ.ย. 2569 — CDN ของ
+    // GitHub Pages ยังส่งไฟล์เก่าแม้ hard refresh/incognito/คนละเครือข่าย) — เปลี่ยนเลขนี้
+    // (หรือจะใช้ timestamp ตอน build ก็ได้) ทุกครั้งที่ push ข้อมูลเดือนใหม่
+    const DATA_V='2569-7b';
+    const manifest = await fetch('data/manifest.json?v='+DATA_V).then(r=>r.json());
+    const lookup = await fetch('data/lookup.json?v='+DATA_V).then(r=>r.json());
+    const monthsData = await Promise.all(manifest.months.map(m=>fetch('data/rows-'+m+'.json?v='+DATA_V).then(r=>r.json())));
     window.__EMBED__ = Object.assign({}, lookup, {rows: [].concat(...monthsData)});
   }catch(e){
     console.error('โหลดข้อมูลสถิติล้มเหลว:', e);
