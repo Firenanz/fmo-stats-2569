@@ -1307,7 +1307,7 @@ function openPortModal(port){
 }
 function closePortModal(){$('#portModal').classList.add('hidden');hideTip();}
 let _dmTrips=[];
-function openDayModal(dt,rows){
+function openDayModal(dt,rows,portName){
   const k=ymd(dt);
   const dayRecs=rows.filter(r=>ymd(r.d)===k);
   const byTrip={};
@@ -1317,7 +1317,7 @@ function openDayModal(dt,rows){
   });
   _dmTrips=Object.values(byTrip).sort((a,b)=>b.w-a.w);
   const totalW=_dmTrips.reduce((s,t)=>s+t.w,0);
-  $('#dmTitle').innerHTML=`🚤 เรือที่เข้าเทียบท่า ${thDate(dt)}`;
+  $('#dmTitle').innerHTML=`🚤 เรือที่เข้าเทียบท่า${portName?(' — '+portName):''} ${thDate(dt)}`;
   $('#dmSub').textContent=`${fmt(_dmTrips.length)} ลำ (เที่ยว) · รวม ${fmt(totalW)} กก.`;
   renderDayModalBody();
   $('#dayModal').classList.remove('hidden');
@@ -1421,8 +1421,11 @@ function renderPortModal(){
   const byDay={};rows.forEach(r=>{const k=ymd(r.d);if(!byDay[k])byDay[k]={d:r.d,w:0,rev:0,trips:new Set()};byDay[k].w+=r.w;byDay[k].rev+=r.rev;byDay[k].trips.add(r.dld);});
   const dayArr=Object.values(byDay).sort((a,b)=>ymd(a.d)-ymd(b.d));
   let dt=`<thead><tr><th>วันที่</th><th class="r">น้ำหนัก (กก.)</th><th class="r">เที่ยว</th><th class="r">ค่าธรรมเนียมตามประกาศ</th></tr></thead><tbody>`;
-  dayArr.forEach(x=>{dt+=`<tr style="cursor:default"><td>${thDate(x.d)}</td><td class="num">${fmt(x.w)}</td><td class="num">${fmt(x.trips.size)}</td><td class="num">${fmt2(x.rev)}</td></tr>`;});
+  dayArr.forEach(x=>{dt+=`<tr style="cursor:pointer" title="คลิกดูรายเรือวันนี้"><td>${thDate(x.d)}</td><td class="num">${fmt(x.w)}</td><td class="num">${fmt(x.trips.size)}</td><td class="num">${fmt2(x.rev)}</td></tr>`;});
   dt+=`</tbody>`; $('#pmDayTable').innerHTML=dt;
+  $('#pmDayTable').querySelectorAll('tbody tr').forEach((tr,i)=>{
+    tr.addEventListener('click',()=>{hideTip();openDayModal(dayArr[i].d,rows,PM.port);});
+  });
   // ---- ตารางวิธีคิดค่าธรรมเนียม ----
   const byFish={};
   rows.forEach(r=>{ const k=r.fish||'(ไม่ระบุ)'; if(!byFish[k]) byFish[k]={w:0,rev:0}; byFish[k].w+=r.w; byFish[k].rev+=r.rev; });
