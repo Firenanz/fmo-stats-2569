@@ -20,8 +20,9 @@ add_month.py — เพิ่มเดือนใหม่เข้าแดช
       และเพราะ rebuild จากต้นทางทุกครั้ง ไม่มี state ค้างให้เพี้ยน
 
 ใช้งาน:
-    python3 add_month.py --fee <ไฟล์fee_Mk2.xlsx> --acc <ไฟล์เทียบบัญชี.xlsx> \
-        --acc-sheet "เทียบ กรกฎาคม 2569" --ym 2569-7 --month-name กรกฎาคม --repo .
+    python3 add_month.py --fee <ไฟล์fee_Mk2.xlsx> --acc <ไฟล์บัญชีรายเดือน.xlsx> \
+        --ym 2569-7 --month-name กรกฎาคม --repo .
+    (--acc-sheet ไม่ต้องใส่ก็ได้ ดีฟอลต์ "รับ-ต่อเดือน" ซึ่งท่าเป็นคอลัมน์ ไม่ใช่แถว)
 
 ถ้าไม่มีไฟล์บัญชีพร้อมตอนนี้ ใส่ --acc skip ได้ (จะเขียน rows.json/cube ไปก่อน
 แล้วรอเติม acc ทีหลังด้วย --acc-only)
@@ -115,6 +116,28 @@ def check_against_golden(ym, announced_total, acc_total):
 # ---------------------------------------------------------------------------
 # 2. อ่านไฟล์ fee -> แถว rows-2569-N.json (ใช้ index ใน lookup.json เดิม)
 # ---------------------------------------------------------------------------
+import datetime as _dt
+
+
+def _parse_ymd(v):
+    """รองรับทั้ง datetime object (เดือนก่อนๆ) และ string 'dd/mm/พ.ศ.' (เจอในไฟล์ ก.ค. 2569)"""
+    if isinstance(v, (_dt.datetime, _dt.date)):
+        return v.year * 10000 + v.month * 100 + v.day
+    s = str(v).strip()
+    d, m, y = s.split("/")
+    return int(y) * 10000 + int(m) * 100 + int(d)
+
+
+def _to_float(v):
+    """รองรับทั้งตัวเลข native และ string มี comma คั่นหลักพัน (เจอในคอลัมน์น้ำหนักไฟล์ ก.ค. 2569)"""
+    if v is None:
+        return 0.0
+    if isinstance(v, (int, float)):
+        return float(v)
+    s = str(v).strip().replace(",", "")
+    return float(s) if s else 0.0
+
+
 def build_rows_from_fee(ws, lookup):
     def idx(arr, v):
         v = "" if v is None else str(v)
@@ -128,14 +151,13 @@ def build_rows_from_fee(ws, lookup):
         if r[8] is None:  # คอลัมน์เครื่องมือว่าง = แถว subtotal
             skipped_subtotal += 1
             continue
-        dt = r[1]
-        ymd = dt.year * 10000 + dt.month * 100 + dt.day
+        ymd = _parse_ymd(r[1])
         rows.append([
             str(r[0]), ymd,
             idx(lookup["ports"], r[2]), str(r[4]),
             idx(lookup["btypes"], r[6]), idx(lookup["bsizes"], r[7]),
             idx(lookup["gears"], r[8]), idx(lookup["fishes"], r[9]),
-            float(r[11] or 0), float(r[13] or 0),
+            _to_float(r[11]), _to_float(r[13]),
         ])
     print(f"  ข้ามแถว subtotal {skipped_subtotal} แถว, ได้ {len(rows)} แถวข้อมูลจริง")
     return rows
@@ -147,42 +169,95 @@ def sum_fee_columns(ws):
     for r in ws.iter_rows(min_row=2, values_only=True):
         if r[8] is None:
             continue
-        wt += float(r[11] or 0)
-        rev += float(r[13] or 0)
+        wt += _to_float(r[11])
+        rev += _to_float(r[13])
     return wt, rev
 
 
 # ---------------------------------------------------------------------------
 # 3. อ่านไฟล์บัญชี -> acc ต่อท่า (ชื่อเต็ม) + ผลรวมเทียบกับคอลัมน์รวมในชีตเดียวกัน
+#
+# *** โครงสร้างจริงของชีต "รับ-ต่อเดือน" (ยืนยันจากไฟล์จริง พ.ย. 2569) ***
+# ท่าเป็น "คอลัมน์" ไม่ใช่แถว! แถว header (มีคำว่า "รวมส่วนกลาง") อยู่แถว ~4
+# แถวข้อมูลคือแถวที่คอลัมน์ B == "ค่าธรรมเนียมสัตว์น้ำผ่านท่า"
+# คอลัมน์ไม่ใช่ท่า TFCC ทั้งหมด (ส่วนกลาง/สป.กรุงเทพ/ทร.หัวหิน/ทร.ปราณบุรี/
+# ทร.ฉะเชิงเทรา ฯลฯ) ถูกตัดทิ้งโดยตั้งใจเพราะไม่อยู่ใน ACC_PORT_MAP ด้านล่าง
+# ***เดิมฟังก์ชันนี้เขียนโดยสมมติว่าท่าเป็น "แถว" (ผิด) — แก้ พ.ย. 2569 ก่อนใช้จริงครั้งแรก***
 # ---------------------------------------------------------------------------
-def build_acc_from_file(path, sheet_name):
+import re as _re
+
+ACC_PORT_MAP = {
+    "สป.สป.": "สะพานปลาสมุทรปราการ",
+    "สป.สมุทรสาคร": "สะพานปลาสมุทรสาคร",
+    "ทร.ตราด": "ท่าเทียบเรือประมงตราด",
+    "ทร.อ่างศิลา": "ท่าเทียบเรือประมงอ่างศิลา",
+    "ทร.ชุมพร": "ท่าเทียบเรือประมงชุมพร",
+    "ทร.หลังสวน": "ท่าเทียบเรือประมงหลังสวน",            # ตัดเลขท้าย (เช่น "13") ก่อน lookup
+    "ทร.สุราษฎร์ฯ": "ท่าเทียบเรือประมงสุราษฏร์ธานี",      # ตัดเลขท้ายก่อน lookup (สะกด ฎ แต่ของจริงใช้ ฏ)
+    "ทร.นครฯ": "สะพานปลานครศรีธรรมราช",                  # หัวตารางขึ้น "ทร." แต่ชื่อจริงเป็น "สะพานปลา"
+    "ทร.สงขลา": "ท่าเทียบเรือประมงสงขลา",                # มี (1)/(2) สองคอลัมน์ บวกรวมเป็นท่าเดียว
+    "ทรสงขลา": "ท่าเทียบเรือประมงสงขลา",                 # สะกดไม่มีจุดก็เจอในไฟล์จริง เผื่อไว้
+    "ทร.ปัตตานี": "ท่าเทียบเรือประมงปัตตานี",
+    "ทร.นราธิวาส": "ท่าเทียบเรือประมงนราธิวาส",
+    "ทร.ระนอง": "ท่าเทียบเรือประมงระนอง",
+    "ทร.ภูเก็ต": "ท่าเทียบเรือประมงภูเก็ต",              # ขึ้นซ้ำ 2 คอลัมน์ในไฟล์จริง บวกรวมเป็นท่าเดียว
+    "ทร.สตูล": "ท่าเทียบเรือประมงสตูล",
+}
+
+
+def _clean_acc_header(h):
+    h = str(h).strip()
+    h = _re.sub(r"\(\d+\)$", "", h)   # ตัด "(1)"/"(2)" ท้าย
+    h = _re.sub(r"\d+$", "", h)       # ตัดเลขท้าย เช่น "13"/"14"/" 15"
+    return h.strip()
+
+
+def build_acc_from_file(path, sheet_name="รับ-ต่อเดือน",
+                         row_label="ค่าธรรมเนียมสัตว์น้ำผ่านท่า",
+                         total_col_label="รวมส่วนกลาง"):
     import openpyxl
     wb = openpyxl.load_workbook(path, data_only=True)
     ws = wb[sheet_name]
+
+    header_row = None
+    for r in range(1, 10):
+        if any(ws.cell(row=r, column=c).value == total_col_label
+               for c in range(1, ws.max_column + 1)):
+            header_row = r
+            break
+    if header_row is None:
+        raise ValueError(f"❌ ไม่เจอ header row ที่มีคอลัมน์ '{total_col_label}' ในชีต '{sheet_name}'")
+    headers = [ws.cell(row=header_row, column=c).value for c in range(1, ws.max_column + 1)]
+
+    data_row = None
+    for r in range(header_row + 1, ws.max_row + 1):
+        if str(ws.cell(row=r, column=2).value or "").strip() == row_label:
+            data_row = r
+            break
+    if data_row is None:
+        raise ValueError(f"❌ ไม่เจอแถว '{row_label}' ในชีต '{sheet_name}'")
+
     acc = {}
-    grand_total_declared = None
-    for row in ws.iter_rows(min_row=4, values_only=True):
-        if not row or row[0] is None:
+    declared_total = None
+    for c, h in enumerate(headers, 1):
+        if h is None:
             continue
-        label = str(row[0]).strip()
-        if "รวมทั้งสิ้น" in label or "รวมส่วนกลาง" in label:
-            if isinstance(row[2], (int, float)):
-                grand_total_declared = float(row[2])
+        v = ws.cell(row=data_row, column=c).value
+        if str(h).strip() == total_col_label:
+            declared_total = float(v or 0)
             continue
-        if "รวม" in label:
-            continue
-        if not isinstance(row[2], (int, float)):
-            continue
-        nm = label.replace("ทร.", "ท่าเทียบเรือประมง").replace("สป.", "สะพานปลา")
-        # ตัด "(1)"/"(2)" ต่อท้ายชื่อซ้ำ (เช่น สงขลา/ภูเก็ตที่มี 2 คอลัมน์บัญชี) แล้วบวกรวมเป็นท่าเดียว
-        nm_clean = nm.split("(")[0].strip()
-        acc[nm_clean] = acc.get(nm_clean, 0.0) + float(row[2])
+        key = _clean_acc_header(h)
+        if key not in ACC_PORT_MAP:
+            continue  # ไม่ใช่ท่า TFCC — ตัดทิ้งโดยตั้งใจ (ส่วนกลาง/กรุงเทพ/หัวหิน/ปราณบุรี/ฉะเชิงเทรา ฯลฯ)
+        port = ACC_PORT_MAP[key]
+        acc[port] = acc.get(port, 0.0) + float(v or 0)
+
     computed_total = sum(acc.values())
-    if grand_total_declared is not None and abs(computed_total - grand_total_declared) > 0.01:
+    if declared_total is not None and abs(computed_total - declared_total) > 0.01:
         raise ValueError(
             f"❌ หยุด! ผลรวม acc ที่บวกเองจากรายท่า ({computed_total:,.2f}) "
-            f"ไม่ตรงกับคอลัมน์ 'รวมทั้งสิ้น/รวมส่วนกลาง' ในชีตเดียวกัน ({grand_total_declared:,.2f})\n"
-            f"   ต้องหาสาเหตุก่อน (คอลัมน์ไม่ตรง/ชื่อท่าซ้ำไม่ถูก map เป็นตัวเดียวกัน ฯลฯ)"
+            f"ไม่ตรงกับคอลัมน์ '{total_col_label}' ในชีตเดียวกัน ({declared_total:,.2f})\n"
+            f"   ต้องหาสาเหตุก่อน (ท่าใหม่ที่ยังไม่อยู่ใน ACC_PORT_MAP / คอลัมน์ขยับ ฯลฯ)"
         )
     return acc, computed_total
 
@@ -193,8 +268,9 @@ def build_acc_from_file(path, sheet_name):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--fee", required=True, help="ไฟล์ fee xlsx (ต้องผ่าน 02_TFCC_ALL_PORT_FEE.py แล้ว)")
-    ap.add_argument("--acc", help="ไฟล์เทียบบัญชี xlsx (ใส่ 'skip' ถ้ายังไม่มี)")
-    ap.add_argument("--acc-sheet", help="ชื่อชีตในไฟล์บัญชี เช่น 'เทียบ กรกฎาคม 2569'")
+    ap.add_argument("--acc", help="ไฟล์บัญชีรายเดือน xlsx (ใส่ 'skip' ถ้ายังไม่มี)")
+    ap.add_argument("--acc-sheet", default="รับ-ต่อเดือน",
+                     help="ชื่อชีตในไฟล์บัญชี (ปกติคือ 'รับ-ต่อเดือน' — ท่าเป็นคอลัมน์ ไม่ใช่แถว)")
     ap.add_argument("--ym", required=True, help="เช่น 2569-7")
     ap.add_argument("--month-name", required=True, help="เช่น กรกฎาคม")
     ap.add_argument("--repo", default=".", help="path ของ repo (มี data/, index.html)")
@@ -238,8 +314,6 @@ def main():
     acc_total = None
     if args.acc and args.acc != "skip":
         print(f"=== ขั้นที่ 3: อ่านไฟล์บัญชี ({args.acc}, ชีต '{args.acc_sheet}') ===")
-        if not args.acc_sheet:
-            raise SystemExit("❌ ต้องระบุ --acc-sheet ด้วยถ้าจะอ่านไฟล์บัญชี")
         acc, acc_total = build_acc_from_file(args.acc, args.acc_sheet)
         check_against_blocklist(acc_total, f"{args.ym} acc")
         check_against_golden(args.ym, rows_wt and rows_rev, acc_total)
