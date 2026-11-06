@@ -138,20 +138,57 @@ def _to_float(v):
     return float(s) if s else 0.0
 
 
-def build_rows_from_fee(ws, lookup):
+# เรือเข้าท่าปลายเดือน แต่ขนถ่ายเสร็จ (วันที่ที่ TFCC บันทึก) ข้ามไปต้นเดือนถัดไป 1-7 วัน
+# ถือเป็นเรื่องปกติ/ตั้งใจของระบบ TFCC เอง (ดู 01_TFCC_ALL_PORTS_Mk34.py TOLERANCE_DAYS=7,
+# ยืนยันซ้ำใน master handoff doc 5 พ.ย. 2569) — ไฟล์เดือนไหนก็นับเป็นเดือนนั้น ไม่ใช่นับตาม
+# วันที่ขนถ่ายเสร็จที่หลุดออกไปเดือนถัดไป ***ห้ามแก้ตรรกะนี้โดยไม่ถามผู้ใช้ก่อน***
+_TOLERANCE_DAYS = 7
+
+
+def _clamp_to_target_month(ymd_val, target_y, target_m):
+    """ถ้าวันที่หลุดไปเดือนอื่น (แต่ไม่เกิน _TOLERANCE_DAYS วันจากขอบเดือนเป้าหมาย) ให้ปัดเข้า
+    เดือนเป้าหมาย (ตัวสุดท้าย/แรกของเดือน) — คืนค่า (ymd_ใหม่, ถูกปรับหรือไม่)"""
+    y, m = ymd_val // 10000, (ymd_val // 100) % 100
+    if (y, m) == (target_y, target_m):
+        return ymd_val, False
+    d_actual = _dt.date(y - 543, m, ymd_val % 100)
+    last_day = _dt.date(target_y - 543, target_m % 12 + 1, 1) - _dt.timedelta(days=1) \
+        if target_m < 12 else _dt.date(target_y - 543 + 1, 1, 1) - _dt.timedelta(days=1)
+    first_day = _dt.date(target_y - 543, target_m, 1)
+    if d_actual > last_day and (d_actual - last_day).days <= _TOLERANCE_DAYS:
+        return target_y * 10000 + target_m * 100 + last_day.day, True
+    if d_actual < first_day and (first_day - d_actual).days <= _TOLERANCE_DAYS:
+        return target_y * 10000 + target_m * 100 + 1, True
+    raise ValueError(
+        f"❌ หยุด! พบวันที่ {d_actual} ซึ่งไม่ใช่เดือนเป้าหมาย ({target_y}-{target_m:02d}) "
+        f"และห่างเกิน {_TOLERANCE_DAYS} วัน (tolerance ของ TFCC เอง) — ไม่ใช่เคสเรือขนถ่ายข้ามเดือนปกติ "
+        f"ต้องตรวจสอบไฟล์ก่อน (อาจมีแถวปีก่อน/ไฟล์ปนเดือนอื่นหลุดเข้ามา)"
+    )
+
+
+def build_rows_from_fee(ws, lookup, target_ym=None):
     def idx(arr, v):
         v = "" if v is None else str(v)
         if v not in arr:
             arr.append(v)
         return arr.index(v)
 
+    target_y = target_m = None
+    if target_ym:
+        target_y, target_m = (int(x) for x in target_ym.split("-"))
+
     rows = []
     skipped_subtotal = 0
+    clamped = 0
     for r in ws.iter_rows(min_row=2, values_only=True):
         if r[8] is None:  # คอลัมน์เครื่องมือว่าง = แถว subtotal
             skipped_subtotal += 1
             continue
         ymd = _parse_ymd(r[1])
+        if target_y is not None:
+            ymd, was_clamped = _clamp_to_target_month(ymd, target_y, target_m)
+            if was_clamped:
+                clamped += 1
         rows.append([
             str(r[0]), ymd,
             idx(lookup["ports"], r[2]), str(r[4]),
@@ -160,6 +197,9 @@ def build_rows_from_fee(ws, lookup):
             _to_float(r[11]), _to_float(r[13]),
         ])
     print(f"  ข้ามแถว subtotal {skipped_subtotal} แถว, ได้ {len(rows)} แถวข้อมูลจริง")
+    if clamped:
+        print(f"  ℹ️  ปัดวันที่เข้าเดือน {target_ym} ให้ {clamped} แถว "
+              f"(เรือเข้าปลายเดือนแต่ขนถ่ายเสร็จข้ามเดือน ≤{_TOLERANCE_DAYS} วัน — ตรงกับ tolerance ของ 01_TFCC_ALL_PORTS)")
     return rows
 
 
@@ -296,7 +336,7 @@ def main():
     assert_fee_processed(ws, args.fee)
 
     print(f"=== ขั้นที่ 2: แปลงเป็น rows + ตรวจผลรวม ===")
-    rows = build_rows_from_fee(ws, lookup)
+    rows = build_rows_from_fee(ws, lookup, target_ym=args.ym)
     fee_wt, fee_rev = sum_fee_columns(ws)
     rows_wt = sum(r[8] for r in rows)
     rows_rev = sum(r[9] for r in rows)
