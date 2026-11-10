@@ -2285,6 +2285,23 @@ render();
 (function(){
   var AI_WORKER_URL = 'https://tfcc-ai.firenanz-fmo.workers.dev';
 
+  // ข้อมูลเสริมจาก CrewAI (QC/วิเคราะห์รายเดือน) — ป้อนเสริมกล่องถาม-ตอบเดิม ไม่ใช่ระบบแยก
+  // ไฟล์อาจยังไม่มี (เดือนแรกที่ยังไม่รัน crew) ต้อง fail เงียบๆ ไม่กระทบการถาม-ตอบปกติ
+  var aiSupplementPromise = null;
+  function aiLoadSupplement(){
+    if(aiSupplementPromise) return aiSupplementPromise;
+    aiSupplementPromise = fetch('data/ai_context_supplement.json').then(function(r){
+      if(!r.ok) return '';
+      return r.json();
+    }).then(function(j){
+      if(!j || (!j['สรุป_QC'] && !j['สรุป_การวิเคราะห์'])) return '';
+      return '\n\nข้อมูลสรุปเสริมจากทีมวิเคราะห์ (เดือน '+(j['เดือนที่สรุป']||'')+'):\n'
+        + (j['สรุป_QC'] ? '- QC/กระทบยอด: '+j['สรุป_QC']+'\n' : '')
+        + (j['สรุป_การวิเคราะห์'] ? '- การวิเคราะห์/แนวโน้ม: '+j['สรุป_การวิเคราะห์']+'\n' : '');
+    }).catch(function(){ return ''; });
+    return aiSupplementPromise;
+  }
+
   function aiPad(n){ return String(n).length<2 ? '0'+n : String(n); }
 
   function aiBuildContext(){
@@ -2546,12 +2563,15 @@ render();
       answerBox.scrollTop = answerBox.scrollHeight;
     }
 
-    aiFetchOnce(q, ctx).then(function(res){
+    aiLoadSupplement().then(function(supp){
+      var fullCtx = ctx + (supp||'');
+      return aiFetchOnce(q, fullCtx);
+    }).then(function(res){
       var ans = res.data && res.data.answer;
       if(ans && aiLooksTruncated(ans)){
         aiBubble.innerHTML = aiMdToHtml(ans) + '<div style="margin-top:6px;opacity:.6;font-size:12px;">🔄 คำตอบอาจไม่สมบูรณ์ กำลังลองใหม่ให้อัตโนมัติ...</div>';
         answerBox.scrollTop = answerBox.scrollHeight;
-        return aiFetchOnce(q, ctx).then(function(res2){
+        return aiLoadSupplement().then(function(supp){ return aiFetchOnce(q, ctx+(supp||'')); }).then(function(res2){
           var ans2 = res2.data && res2.data.answer;
           if(ans2 && !aiLooksTruncated(ans2)){ finish(ans2); }
           else if(ans2 && ans2.length > ans.length){ finish(ans2); }
